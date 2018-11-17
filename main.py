@@ -17,15 +17,20 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data.image.cocoDataSet import cocoDataSet
-from data.image.cocoDataSet import cocoDataLoader
+from data.image.cocoDataSet import vgDataSet
+from data.image.cocoDataSet import vgDataLoader
 from data.graph.vgDataSet import GraphLoader
 from models.gsnn import GSNN
 
 parser = argparse.ArgumentParser()
 # dataset settings
+parser.add_argument('--projectpath',type=str, default="NUSWID",help='which dataset to use')
 parser.add_argument('--dataset',type=str, default="NUSWID",help='which dataset to use')
-parser.add_argument('--datapath',type=str, default="L:/",help='where to place your data')
+parser.add_argument('--datapath',type=str, default="L:/vg/VG_100K_2",help='where to place your data')
+parser.add_argument('--label_dir',type=str, default="label_dict.json",help='where to place your data')
+parser.add_argument('--concat_dir',type=str, default="concat.json",help='where to place your data')
+parser.add_argument('--anno_dir',type=str, default="annotation.json",help='where to place your data')
+parser.add_argument('--graph_dir',type=str, default="annotation.json",help='where to place your data')
 
 # question settings
 parser.add_argument('--task_id', type=int, default=4, help='bAbI task id')
@@ -40,7 +45,7 @@ parser.add_argument('--label_num', type=int, default=80, help='coco cats for lab
 parser.add_argument('--batch_size', type=int, default=16, help='train batch size')
 parser.add_argument('--state_dim', type=int, default=5, help='GSNN hidden state size')
 parser.add_argument('--edge_type_num', type=int, default=2, help='GSNN edge type')
-parser.add_argument('--node_num', type=int, default=1000, help='GSNN hidden state size')
+parser.add_argument('--node_num', type=int, default=919, help='GSNN hidden state size')
 parser.add_argument('--annotation_dim', type=int, default=5, help='GSNN annotation state size')
 parser.add_argument('--n_steps', type=int, default=5, help='propogation steps number of GGNN')
 parser.add_argument('--importance_factor', type=float, default=0.3, help='importance factor of gsnn')
@@ -56,11 +61,19 @@ parser.add_argument('--cuda', type=bool, default=True, help='enables cuda')
 parser.add_argument('--method_pipeline', type=str, default='SGD', help='training method')
 parser.add_argument('--method_gsnn', type=str, default='Adam', help='training method')
 parser.add_argument('--weight_decay', type=float, default=1e-6)
-parser.add_argument('--penalty', type=int, default=2, help='L2 penalty')
+parser.add_argument('--momentum', type=float, default=0.5)
 parser.add_argument('--penalty', type=int, default=2, help='L2 penalty')
 parser.add_argument('--verbal', type=bool, default=True, help='print training info or not')
 parser.add_argument('--manual_seed', type=int, help='manual seed')
 opt = parser.parse_args()
+
+opt.project_path = os.getcwd()
+opt.dataset = 'vgGenome'
+opt.datapath = 'L:/vg/VG_100K_2'
+opt.label_dir = opt.project_path + '/data/image/label_dict.json'
+opt.concat_dir = opt.project_path + '/data/image/concat_dict.json'
+opt.anno_dir = opt.project_path + '/data/image/anno_dict.json'
+opt.graph_dir = opt.project_path + '/data/graph/graph_filtered.json'
 
 if opt.manual_seed is None:
     opt.manual_seed = random.randint(1, 10000)
@@ -71,22 +84,26 @@ torch.manual_seed(opt.manual_seed)
 from models.gsnn import PipeLine
 def main(opt):
     # set up data
-    train_dataset = cocoDataSet(path=opt.datapath, 
-                                data_type='train')
-    train_dataloader = cocoDataLoader(train_dataset, 
+    train_dataset = vgDataSet(image_dir=opt.datapath,
+                              label_dir=opt.label_dir,
+                              concat_dir=opt.concat_dir,
+                              anno_dir=opt.anno_dir)
+    train_dataloader = vgDataLoader(train_dataset,
                                       batch_size=opt.batch_size,
                                       shuffle=True, 
                                       num_workers=opt.workers_num)
-    test_dataset = cocoDataSet(path=opt.datapath,
-                               data_type='false')
-    test_dataloader = cocoDataLoader(test_dataset, 
+    test_dataset = vgDataSet(image_dir=opt.datapath,
+                              label_dir=opt.label_dir,
+                              concat_dir=opt.concat_dir,
+                              anno_dir=opt.anno_dir)
+    test_dataloader = vgDataLoader(test_dataset,
                                      batch_size=opt.batch_size,
                                      shuffle=False,
                                      num_workers=opt.workers_num)
 
     # set up model and train
-    pipeline = PipeLine(opt)
-    PipeLine._train(dataloader=train_dataloader)
+    pipeline = PipeLine(opt=opt, dataloader=train_dataloader)
+    pipeline._train()
 
     return
 

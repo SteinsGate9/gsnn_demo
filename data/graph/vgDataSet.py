@@ -130,9 +130,9 @@ def LoadLabels(attripath, objpath):
         assert len(list) == 316
         json.dump(list,open('labels' + '.json', 'w'), indent=2)
 
-def GraphLoader():
+def GraphLoader(datapath):
     graph = Graph(nx.Graph())
-    graph.load_graph_fromjson("graph_filtered.json")
+    graph.load_graph_fromjson(datapath)
     return graph
 
 class Graph(nx.Graph):
@@ -182,15 +182,15 @@ class Graph(nx.Graph):
         return edge_pairs
 
     def get_adj(self):
-        return nx.adjacency_matrix(self, nodelist=np.arange(self.node_num)).toarray()
+        return nx.adjacency_matrix(self).toarray()
 
     def get_adj_nx(self):
-        return nx.adjacency_matrix(self, nodelist=np.arange(self.node_num))
+        return nx.adjacency_matrix(self)
 
     def get_adj_sp(self):
         x, y = zip(*self.edges())
-        return sp.coo_matrix((np.ones(self.edge_num), (x, y)),
-                                shape=(self.node_num, self.node_num))
+        return sp.coo_matrix((np.ones(len(self.edges())), (x, y)),
+                                shape=(len(self.nodes()), len(self.nodes())))
 
     def get_normalized_adj(self):
         pass
@@ -296,11 +296,11 @@ class Graph(nx.Graph):
     def add_wordnet(self):
         from nltk import word_tokenize as wn
         wn.synset('walk.v.01').entailments()
-
-relationship = 'relationships.json'
-attributes = 'attributes.json'
-objects = 'objects.json'
-lis = json.load(open('labels_dict.json','r'))
-print(len(lis.keys()), len(lis['1']))
+if __name__ == "main":
+    relationship = 'relationships.json'
+    attributes = 'attributes.json'
+    objects = 'objects.json'
+    lis = json.load(open('labels_dict.json','r'))
+    print(len(lis.keys()), len(lis['1']))
 
 

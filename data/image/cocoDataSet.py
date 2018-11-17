@@ -5,11 +5,12 @@ Created on Tue Oct 30 19:28:05 2018
 @author: hsc
 """
 from torch.utils.data import DataLoader
+from torch.autograd import Variable
+import torch
 from pycocotools.coco import COCO
 from PIL import Image
 import os
 import numpy as np
-import h5py
 import skimage.io as io
 import matplotlib.pyplot as plt
 import pylab
@@ -18,14 +19,68 @@ import torchvision.transforms as transforms
 
 class vgDataLoader(DataLoader):
     def __init__(self, *args, **kwargs):
-        super(cocoDataLoader, self).__init__(*args, **kwargs)
+        super(vgDataLoader, self).__init__(*args, **kwargs)
 
 class cocoDataLoader(DataLoader):
     def __init__(self, *args, **kwargs):
         super(cocoDataLoader, self).__init__(*args, **kwargs)
 
+import json
 class vgDataSet(object):
-    pass
+    """
+       Load vg images for Gsnn
+       """
+    def __len__(self) -> int:
+        return len(self.image_dir)
+
+    def __init__(self, image_dir: str, label_dir:str, concat_dir:str, anno_dir:str):
+        super().__init__()
+        self.image_dir = [os.path.join(image_dir,f) for f in os.listdir(image_dir)]
+        self.image_name = [i.split("/")[-1] for i in self.image_dir]
+        #self.label_data = json.loads(label_dir) ## 316
+        self.label_data = dict.fromkeys(self.image_name, np.zeros(316))
+        #self.concat_data = json.loads(concat_dir) ## 80
+        self.concat_data =dict.fromkeys(self.image_name, np.zeros(80))
+        #self.annotation_data = json.loads(anno_dir) ## 919
+        self.annotation_data = dict.fromkeys(self.image_name, np.zeros(919))
+        self.transform = transforms.Compose(transforms = [
+            transforms.Scale(size=224),
+            transforms.ToTensor()
+        ])
+
+    def __getitem__(self, index: int):
+        # deal with image
+        img_path = self.image_dir[index]
+        img_name = self.image_name[index]
+        with Image.open(img_path) as img:
+            image = img.convert('RGB')
+
+        # deal with others
+        label = self.label_data[img_name]
+        concat = self.concat_data[img_name]
+        anno = self.annotation_data[img_name]
+
+        # turn to torch
+        if self.transform is not None:
+            image = self.transform(image)
+        label = torch.FloatTensor(label).requires_grad_()
+        concat = torch.FloatTensor(concat).requires_grad_()
+        anno = torch.FloatTensor(anno).requires_grad_()
+
+        # cuda
+        cuda = True
+        if cuda:
+            image = image.cuda()
+            concat = concat.cuda()
+            label = label.cuda()
+            anno = anno.cuda()
+
+        return image, label, concat, anno
+
+
+
+
+
 
 class cocoDataSet(object):
     """
@@ -56,21 +111,21 @@ class cocoDataSet(object):
     def __len__(self):
         return len(self.name_h)
 
-
-dataDir=''
-dataType='train'
-annFile='{}/annotations/instances_{}.json'.format(dataDir,dataType)
-gg = cocoDataSet(dataDir,dataType)
-print(len(gg))
-c = 0
-from tqdm import tqdm
-pbar = tqdm(range(len(gg)))
-for a in pbar:
-    print(gg[a][0])
-    print(gg[a][1])
-    print(gg[a][2])
-    print(gg[a][3])
-print(c)
+if __name__ == "main":
+    dataDir=''
+    dataType='train'
+    annFile='{}/annotations/instances_{}.json'.format(dataDir,dataType)
+    gg = cocoDataSet(dataDir,dataType)
+    print(len(gg))
+    c = 0
+    from tqdm import tqdm
+    pbar = tqdm(range(len(gg)))
+    for a in pbar:
+        print(gg[a][0])
+        print(gg[a][1])
+        print(gg[a][2])
+        print(gg[a][3])
+    print(c)
 
 
 
