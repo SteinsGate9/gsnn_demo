@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import pylab
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
+from skimage import transform as tr
 
 class vgDataLoader(DataLoader):
     def __init__(self, *args, **kwargs):
@@ -44,7 +45,6 @@ class vgDataSet(object):
         #self.annotation_data = json.loads(anno_dir) ## 919
         self.annotation_data = dict.fromkeys(self.image_name, np.zeros(919))
         self.transform = transforms.Compose(transforms = [
-            transforms.Scale(size=224),
             transforms.ToTensor()
         ])
 
@@ -62,10 +62,13 @@ class vgDataSet(object):
 
         # turn to torch
         if self.transform is not None:
+            image = image.resize((224, 224))
             image = self.transform(image)
-        label = torch.FloatTensor(label).requires_grad_()
-        concat = torch.FloatTensor(concat).requires_grad_()
-        anno = torch.FloatTensor(anno).requires_grad_()
+        from skimage import io, transform
+
+        label = torch.FloatTensor(label)
+        concat = torch.FloatTensor(concat)
+        anno = torch.FloatTensor(anno)
 
         # cuda
         cuda = True

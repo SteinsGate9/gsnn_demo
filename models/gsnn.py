@@ -121,6 +121,12 @@ class PipeLine(torch.nn.Module):
             pbar = tqdm(self.dataloader)
             for image, annotation, concat, label in pbar:
 
+                # grad
+                image.requires_grad_()
+                annotation.requires_grad_()
+                concat.requires_grad_()
+                label.requires_grad_()
+
                 # get result
                 output = self.forward(image, concat, annotation)
                 loss = F.binary_cross_entropy(output, label)
