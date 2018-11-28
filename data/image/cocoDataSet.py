@@ -7,7 +7,6 @@ Created on Tue Oct 30 19:28:05 2018
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import torch
-from pycocotools.coco import COCO
 from PIL import Image
 import os
 import numpy as np
@@ -17,7 +16,7 @@ import pylab
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 from skimage import transform as tr
-
+import re
 class vgDataLoader(DataLoader):
     def __init__(self, *args, **kwargs):
         super(vgDataLoader, self).__init__(*args, **kwargs)
@@ -36,14 +35,15 @@ class vgDataSet(object):
 
     def __init__(self, image_dir: str, label_dir:str, concat_dir:str, anno_dir:str):
         super().__init__()
-        self.image_dir = [os.path.join(image_dir,f) for f in os.listdir(image_dir)]
-        self.image_name = [i.split("/")[-1] for i in self.image_dir]
-        #self.label_data = json.loads(label_dir) ## 316
-        self.label_data = dict.fromkeys(self.image_name, np.zeros(316))
-        #self.concat_data = json.loads(concat_dir) ## 80
+        #self.image_dir = [os.path.join(image_dir,f) for f in os.listdir(image_dir)]
+        self.image_dir = [os.path.join(image_dir,'2529.jpg')]
+        self.image_name = [re.sub("\D", "",i.split("/")[-1]) for i in self.image_dir]
+        #elf.label_data = json.load(open(label_dir,'r')) ## 316
+        self.label_data = dict.fromkeys(self.image_name, np.zeros(323))
+        #self.concat_data = json.load(open(concat_dir,'r')) ## 80
         self.concat_data =dict.fromkeys(self.image_name, np.zeros(80))
-        #self.annotation_data = json.loads(anno_dir) ## 919
-        self.annotation_data = dict.fromkeys(self.image_name, np.zeros(919))
+        #self.annotation_data = json.load(open(anno_dir, 'r')) ## 919
+        self.annotation_data = dict.fromkeys(self.image_name, np.zeros(1278))
         self.transform = transforms.Compose(transforms = [
             transforms.ToTensor()
         ])
@@ -52,14 +52,19 @@ class vgDataSet(object):
         # deal with image
         img_path = self.image_dir[index]
         img_name = self.image_name[index]
-        with Image.open(img_path) as img:
-            image = img.convert('RGB')
-
+        
+        try:
+            with Image.open(img_path) as img:
+                image = img.convert('RGB')
+        except:
+            pass
         # deal with others
         label = self.label_data[img_name]
+        #concat = np.zeros(80)
         concat = self.concat_data[img_name]
         anno = self.annotation_data[img_name]
-
+        anno[1] = anno[20] = anno[31] = 1
+        #print(len(anno))
         # turn to torch
         if self.transform is not None:
             image = image.resize((224, 224))
@@ -69,14 +74,6 @@ class vgDataSet(object):
         label = torch.FloatTensor(label)
         concat = torch.FloatTensor(concat)
         anno = torch.FloatTensor(anno)
-
-        # cuda
-        cuda = True
-        if cuda:
-            image = image.cuda()
-            concat = concat.cuda()
-            label = label.cuda()
-            anno = anno.cuda()
 
         return image, label, concat, anno
 

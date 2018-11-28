@@ -493,13 +493,27 @@ class Graph(nx.Graph):
     def add_wordnet(self):
         from nltk import word_tokenize as wn
         wn.synset('walk.v.01').entailments()
+
+
+    def get_adj_nodes(self, nodes):
+        A = self.get_adj()
+        re = set(nodes)
+        for i in nodes:
+            yes = np.where(A[i] > 0)
+            for nei in yes:
+                re.add(nei)
+        return list(re)
+
+
+
+
 if __name__ == "__main__":
     relationship = 'relationships.json'
     attributes = 'attributes.json'
     objects = 'objects.json'
     #
 
-    # LoadLabels(attributes,objects)
+    LoadLabels(attributes,objects)
     # graph = Graph(nx.Graph())
     # graph.add_relationships(relationship)
     # graph.add_attributes(attributes)
@@ -508,13 +522,14 @@ if __name__ == "__main__":
     # LoadLabelForImage(attributes,objects)
 
 
-    
-    true = np.asarray(['___background__', u'person', u'bicycle', u'car', u'motorcycle', u'airplane', u'bus', u'train', u'truck', u'boat', u'traffic light', u'fire hydrant', u'stop sign', u'parking meter', u'bench', u'bird', u'cat', u'dog', u'horse', u'sheep', u'cow', u'elephant', u'bear', u'zebra', u'giraffe', u'backpack', u'umbrella', u'handbag', u'tie', u'suitcase', u'frisbee', u'skis', u'snowboard', u'sports ball', u'kite', u'baseball bat', u'baseball glove', u'skateboard', u'surfboard', u'tennis racket', u'bottle', u'wine glass', u'cup', u'fork', u'knife', u'spoon', u'bowl', u'banana', u'apple', u'sandwich', u'orange', u'broccoli', u'carrot', u'hot dog', u'pizza', u'donut', u'cake', u'chair', u'couch', u'potted plant', u'bed', u'dining table', u'toilet', u'tv', u'laptop', u'mouse', u'remote', u'keyboard', u'cell phone', u'microwave', u'oven', u'toaster', u'sink', u'refrigerator', u'book', u'clock', u'vase', u'scissors', u'teddy bear', u'hair drier', u'toothbrush'])
-  
-
     g = GraphLoader('filtered_graph_v2.json')
-    n = g.nodes()
-    print(n)
+    print(g.get_adj_sp().shape)
+    # true = np.asarray(['___background__', u'person', u'bicycle', u'car', u'motorcycle', u'airplane', u'bus', u'train', u'truck', u'boat', u'traffic light', u'fire hydrant', u'stop sign', u'parking meter', u'bench', u'bird', u'cat', u'dog', u'horse', u'sheep', u'cow', u'elephant', u'bear', u'zebra', u'giraffe', u'backpack', u'umbrella', u'handbag', u'tie', u'suitcase', u'frisbee', u'skis', u'snowboard', u'sports ball', u'kite', u'baseball bat', u'baseball glove', u'skateboard', u'surfboard', u'tennis racket', u'bottle', u'wine glass', u'cup', u'fork', u'knife', u'spoon', u'bowl', u'banana', u'apple', u'sandwich', u'orange', u'broccoli', u'carrot', u'hot dog', u'pizza', u'donut', u'cake', u'chair', u'couch', u'potted plant', u'bed', u'dining table', u'toilet', u'tv', u'laptop', u'mouse', u'remote', u'keyboard', u'cell phone', u'microwave', u'oven', u'toaster', u'sink', u'refrigerator', u'book', u'clock', u'vase', u'scissors', u'teddy bear', u'hair drier', u'toothbrush'])
+    #
+    #
+    # g = GraphLoader('filtered_graph_v2.json')
+    # n = g.nodes()
+    # print(n)
     # true = list((
     #             '__background__', u'person', u'bicycle', u'car', u'motorcycle', u'airplane', u'bus', u'train', u'truck',
     #             u'boat', u'traffic light', u'fire hydrant', u'stop sign', u'parking meter', u'bench', u'bird', u'cat',
@@ -530,10 +545,10 @@ if __name__ == "__main__":
     # #
     # lisnotinnodes = list(filter(lambda x:x not in n,lis))
     # truenotinlist = list(filter(lambda x: x not in lis, true))
-    truenotingraph = list(filter(lambda x: x not in n, true))
-    # print([i if i in  true else None for i in lisnotinnodes])
-    # print(truenotinlist)
-    print(truenotingraph)
+    # truenotingraph = list(filter(lambda x: x not in n, true))
+    # # print([i if i in  true else None for i in lisnotinnodes])
+    # # print(truenotinlist)
+    # print(truenotingraph)
     # print(list(sorted(n)))
     # g.print_info()
     # lis = json.load(open('labels_dict.json','r'))
