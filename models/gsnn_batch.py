@@ -4,11 +4,12 @@ Created on Tue Oct 30 19:28:05 2018
 
 @author: hsc
 """
-import os
 import json
 import torch
 import numpy as np
 import torch.nn as nn
+from functools import reduce
+import operator
 import torch.nn.functional as F
 import torchvision.models as models
 from data.graph.vgDataSet import *
@@ -36,7 +37,6 @@ class finetune(torch.nn.Module):
             nn.Dropout(),
             )
 
-
     def forward(self, x):
         x = self.features(x)
         x = x.view(x.size(0), -1)
@@ -56,8 +56,7 @@ class PipeLine(torch.nn.Module):
 
         # set vgg 16
         vgg16 = models.vgg16(pretrained=False)
-        vgg16.load_state_dict(torch.load('/home/nesa320/huangshicheng/gitforwork/my_gsnn/models/vgg/vgg16-397923af.pth'))
-        
+        vgg16.load_state_dict(torch.load('/home/nesa320/huangshicheng/gitforwork/my_gsnn/models/vgg16-397923af.pth'))
         pretrained_dict = vgg16.state_dict()
         self.vgg16 = finetune(vgg16)
         model_dict = self.vgg16.state_dict()
@@ -70,16 +69,10 @@ class PipeLine(torch.nn.Module):
 
         # set output layer
         self.output = nn.Sequential(
-            nn.Linear((4096+opt.label_num+opt.state_dim*opt.label_len),
+            nn.Linear((4096+80+321*5),
                 self.opt.vg_objects+self.opt.vg_attributes+self.opt.coco_cats),
             nn.Dropout(),
             nn.Sigmoid())
-
-        # cuda
-        if self.opt.cuda:
-            self.cuda()
-
-
 
     def forward(self, image, concat, annotation):
         """forward pipeline"""
@@ -87,8 +80,7 @@ class PipeLine(torch.nn.Module):
         gsnn_data = self.gsnn(annotation)
         vgg16_data = self.vgg16(image)
         frcnn_data = concat
-        if type(gsnn_data) == int:
-            return -1
+        print(gsnn_data.shape, vgg16_data.shape, frcnn_data.shape)
         concat = torch.cat([gsnn_data, vgg16_data, frcnn_data], 1)
 
         # output
@@ -98,6 +90,10 @@ class PipeLine(torch.nn.Module):
     def _train(self):
         """train this fucker"""
         self.train()
+
+        # cuda
+        if self.opt.cuda:
+            self.cuda()
         i = 0
 
         # set optimizers
@@ -119,22 +115,15 @@ class PipeLine(torch.nn.Module):
 
         # begin training
         from tqdm import tqdm
-        epoch = self.opt.checkpoint_epoch
-        epoch_whole = self.opt.epochs - self.opt.checkpoint_epoch
-        for eps in range(epoch_whole):
+        for epoch in range(self.opt.epochs):
             # decay lr
-            if eps+epoch % (self.opt.lr_decay_step + 1) == 0:
+            if epoch % (self.opt.lr_decay_step + 1) == 0:
                 adjust_learning_rate(optimizer_adam, self.opt.lr_decay_rate)
                 adjust_learning_rate(optimizer_sgd, self.opt.lr_decay_rate)
 
             # begin
             pbar = tqdm(self.dataloader)
             for image, label, concat, annotation in pbar:
-
-                # check image
-                if image.shape[1] == 1:
-                    continue
-
                 # cuda
                 if self.opt.cuda:
                     image = image.cuda()
@@ -143,13 +132,12 @@ class PipeLine(torch.nn.Module):
                     label = label.cuda()
 
                 # grad
-                #annotation.requires_grad_()
-                #concat.requires_grad_()
+                image.requires_grad_()
+                annotation.requires_grad_()
+                concat.requires_grad_()
 
                 # get result
                 output = self.forward(image, concat, annotation)
-                if type(output) == int:
-                    continue
                 loss = F.binary_cross_entropy(output, label)
 
                 # set optimizers
@@ -163,16 +151,8 @@ class PipeLine(torch.nn.Module):
 
                 # verbose
                 i = i + 1
-                if self.opt.verbose and i%1000 == 0:
-                    print('[%d/%d][%d/%d] Loss: %.4f' % (eps+epoch, self.opt.epochs, i, len(pbar), loss.data))
-
-                    # save training model
-                    save_name = os.path.join('/home/nesa320/huangshicheng/gitforwork/my_gsnn/models/checkpoints',
-                                             'gsnn_{}_{}.pth'.format(eps+epoch,i))
-                    torch.save({
-                        'state_dict': self.state_dict(),
-                    }, save_name)
-
+                if self.opt.verbose and i%len(pbar) == 500:
+                    print('[%d/%d][%d/%d] Loss: %.4f' % (epoch, self.opt.epochs, i, len(dataloader), loss.data[0]))
 
         return
 
@@ -209,12 +189,17 @@ class Propogator(nn.Module):
         )
 
 
-
     def forward(self, state_in, state_cur, A):
         # [n 2n]
         A_in = A[:, :, :self.node_num*self.edge_type_num]
         # [n,H]
         a_in = torch.bmm(A_in, state_in)
+        #
+        print(A_in.shape, state_in.shape)
+        #state_in = torch.view(1, ,)
+        #A_in = A[]
+
+        #
         # [n, 3H]
         a = torch.cat((a_in, state_cur),2)
         # [n, H]
@@ -249,6 +234,7 @@ class GGNN(nn.Module):
             # incoming and outgoing edge embedding
             in_fc = nn.Linear(self.state_dim, self.state_dim)
             self.add_module("in_{}".format(i), in_fc)
+
         self.in_fcs = AttrProxy(self, "in_")
 
         # Propogation Model
@@ -310,9 +296,7 @@ class GSNN(torch.nn.Module):
 
         # set graph
         self.graph =  GraphLoader(opt.graph_dir)
-        self.adj = torch.FloatTensor(self.graph.get_adj())
-        if self.opt.cuda:
-            self.adj = self.adj.cuda()
+        self.adj = self.graph.get_adj()
         self.labels = json.load(open(self.opt.label2_dir, 'r'))
         self.n = list(self.graph.nodes)
         self.label_mask = list([self.n.index(i) if i in self.n else -1 for i in self.labels])
@@ -330,9 +314,6 @@ class GSNN(torch.nn.Module):
         # init
         self._initialize()
 
-        # cuda
-        if self.opt.cuda:
-            self.cuda()
 
     def _initialize(self):
         for m in self.modules():
@@ -340,25 +321,25 @@ class GSNN(torch.nn.Module):
                 m.weight.data.normal_(0.0, 0.02)
                 m.bias.data.fill_(0)
 
+
     def _initialize_importantnet(self, annotation, adj):
         anno = torch.where(annotation > 0, torch.full_like(annotation, 1), annotation)
-        cur = np.arange(adj.shape[0])[(anno.data.cpu().numpy() != 0).squeeze(0)]
-        #print("origin points",len(cur))
+        cur_batch = np.tile(np.arange(adj.shape[0]), annotation.shape[0]).reshape(annotation.shape[0],-1)[(anno.data.cpu().numpy() != 0)]
+        # batch trans
         for i in range(2):
-            old = cur
-            cur = get_adj_nodes(adj, cur)
-            cur_add = list(set(cur) - set(old))
-            #rint("add points",len(cur_add))
-            anno[:, cur_add] = self.opt.importance_factor**(i+1)
+            old_batch = cur_batch
+            cur_batch = get_adj_nodes_batch(adj, cur_batch)
+            cur_add_batch = list([set(cur_batch[i]) - set(old_batch[i]) for i in range(len(cur_add_batch))])
+            cur_add_batch_new = list([i,j] for j in cur_add_batch[i] for i in range(len(cur_add_batch)))
+            reduce(operator.add, cur_add_batch_new)
+            anno[cur_add_batch_new] = self.opt.importance_factor**(i+1)
 
         return anno
 
     def forward(self, annotation):
 
         # 假设annotation是1000多维的
-        if sum(annotation[0].cpu().data.numpy()) == 0:
-            return -1
-        anno = self._initialize_importantnet(annotation, self.adj).unsqueeze(2)
+        anno = self._initialize_importantnet(annotation, self.graph.get_adj()).unsqueeze(2)
         anno_copy = anno.clone()
         padding = torch.zeros(len(anno), self.opt.node_num, self.opt.state_dim - self.opt.annotation_dim).float()
         if self.opt.cuda:
@@ -370,10 +351,10 @@ class GSNN(torch.nn.Module):
         current_nodes = None
 
         # set up adj
-        sub_graph, current_nodes_expand, current = SetUpAdj(self.adj, important, current_nodes, anno, None)
-        anno = anno[:,current_nodes_expand,:]
-        prop_state = init_input[:,current_nodes_expand,:]
-        self.propogation_net.A = sub_graph.unsqueeze(0)
+        sub_graph, current_nodes_expand, current = SetUpAdj(self.adj, important, current_nodes, anno)
+        anno = anno[:, current_nodes_expand, :]
+        prop_state = init_input[:, current_nodes_expand, :]
+        self.propogation_net.A = torch.FloatTensor(sub_graph).unsqueeze(0)
         self.propogation_net.A = torch.cat((self.propogation_net.A,self.propogation_net.A),dim=2)
 
         for i_step in range(self.n_steps):
@@ -384,12 +365,12 @@ class GSNN(torch.nn.Module):
             important  = self.important_net(forimportant).squeeze(0).squeeze(1)
 
             # update adj# 取important 向量除了已有的前5
-            sub_graph, current_nodes_expand, current = SetUpAdj(self.adj, important, current, anno, current_nodes_expand)
+            sub_graph, current_nodes_expand, current = SetUpAdj(self.adj, important, current, anno)
 
             # update state
             anno = anno_copy[:, current_nodes_expand, :]
             prop_state = init_input[:, current_nodes_expand, :]
-            self.propogation_net.A = sub_graph.unsqueeze(0)
+            self.propogation_net.A = torch.FloatTensor(sub_graph).unsqueeze(0)
             self.propogation_net.A = torch.cat((self.propogation_net.A, self.propogation_net.A), dim=2)
 
         # output net
@@ -398,70 +379,84 @@ class GSNN(torch.nn.Module):
 
         # masked fuck
         mask = list(set([current_nodes_expand.index(i) if i in current else -1 for i in current_nodes_expand]))
-        try:
-            mask.remove(-1)
-        except:
-            pass
+        mask.remove(-1)
         forimportant = forimportant[:, mask, :]
         node_bias = self.node_bias[:, current, :]
         foroutput = torch.cat((forimportant, node_bias), 2)
         output = self.output_net(foroutput)
 
         # padding and stretching -> 323x5
+        assert len(current) <= self.opt.label_len
         target = torch.zeros(self.opt.batch_size, self.opt.label_len, self.state_dim)
-        if self.opt.cuda:
-            target = target.cuda()
 
         # decode label
-        mask = sorted(list(set([i if self.label_mask[i] in current else -1 for i in range(self.opt.label_len)])))
+        mask = list(set([i if self.label_mask[i] in current else -1 for i in range(self.opt.label_len)]))
+        mask.remove(-1)
         mask2 = list(set([current.index(i) if i in self.pure_label_mask else -1 for i in current]))
-        try:
-            mask.remove(-1)
-            mask2.remove(-1)
-        except:
-            pass
-        #print(np.array(self.label_mask)[mask], np.array(current)[mask2])
+        mask2.remove(-1)
+
         # output
         target[:, mask, :] = output[:, mask2, :]
-        target = target.view(self.opt.batch_size,self.opt.label_len*self.state_dim,-1).squeeze(2)
+        output = target
+        assert output.shape[1] == self.opt.label_len
+        output = output.view(self.opt.batch_size,self.opt.label_len*self.state_dim,-1).squeeze(2)
+        assert output.shape[0] == self.opt.batch_size
+        return output
 
-        return target
-
-def SetUpAdj(graph, important, current_nodes, annotation, expand):
+def SetUpAdj(graph, important_list, current_nodes_list, annotation_list):
     # set subgraph and expanded_nodes
-    if current_nodes is None:
+    if current_nodes_list is None:
+        for i in len(annotation_list)
+        # 16 z 1
         mask = annotation.data.cpu().numpy() == 1
-        current = np.arange(0,graph.shape[0],1)[mask.squeeze(0).squeeze(1)].tolist()
+        # 16 z 1
+        current = np.arange(0,graph.shape[0],1)[mask.squeeze(0).squeeze(1)]
+        # 16 x+a
         current_nodes_expand = get_adj_nodes(graph, current)
+        # check
+        assert len(current_nodes_expand) > len(current)
+        # 16 x+a+a
         sub_graph = get_sub_graph(graph,current_nodes_expand)
 
     else:
-        imr = important.data.cpu().sort(0,True)[1].numpy().tolist()
+        im = important.data
+        imr = im.sort(0,True)[1].numpy()
+        #imr = list(reversed(np.argsort(im)))
         a = 0
         current_nodes_expand = current_nodes
         for i in imr:
-            if expand[i] not in current_nodes:
-                current_nodes_expand.append(expand[i])
+            if i not in current_nodes:
+                current_nodes_expand.append(i)
             a = a + 1
             if a >= 5:
                 break
-        current_nodes_expand = sorted(current_nodes_expand)
-        current = current_nodes_expand.copy()
-        current_nodes_expand = get_adj_nodes(graph, current)
-        sub_graph = get_sub_graph(graph, current_nodes_expand)
+        current = np.array(sorted(current_nodes_expand))
+        current_nodes_expand = get_adj_nodes(graph,current)
+        sub_graph = get_sub_graph(graph,current_nodes_expand)
 
+    current = current.tolist()
     return sub_graph, current_nodes_expand, current
 
 def get_batch_graph_nodes(graph_list):
     first = [i.nodes() for i in graph_list]
     return first
 
-def get_adj_nodes(graph, nodes):
-    re = set(nodes)
-    yes = set(torch.nonzero(graph[nodes])[:,1].cpu().data.numpy())
-    return sorted(list(re|yes))
+def get_adj_nodes_batch(graph, nodes):
+    A = graph
+    re = list([set(nodes[i]) for i in range(nodes.shape[0])])
+    for j in range(nodes.shape[0]):
+        for i in nodes[j]:
+            yes = np.where(A[i] > 0)[0]
+            for nei in yes:
+                assert A[i][nei] > 0
+                re[j].add(nei)
+    return [sorted(list(i)) for i in re]
 
+def get_adj_nodes_batch(graph, nodes_list):
+    A = graph
+    re = set()
 def get_sub_graph(graph, current):
-    re = ((graph[current,:].transpose(1,0))[current,:]).transpose(1,0)
+    mask = np.array([True if x in current else False for x in range(graph.shape[0])])
+    re = np.transpose(np.transpose(graph[mask])[mask])
     return re
 

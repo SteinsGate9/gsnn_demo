@@ -43,10 +43,10 @@ parser.add_argument('--workers_num', type=int, help='number of data loading work
 # model settings
 parser.add_argument('--vg_objects', type=int, default=200, help='vg objects for labels')
 parser.add_argument('--vg_attributes', type=int, default=100, help='vg attributes for labels')
-parser.add_argument('--coco_cats', type=int, default=23, help='coco cats for labels')
+parser.add_argument('--coco_cats', type=int, default=16, help='coco cats for labels')
 parser.add_argument('--label_num', type=int, default=80, help='coco cats for labels')
-parser.add_argument('--label_len', type=int, default=323, help='coco cats for labels')
-parser.add_argument('--batch_size', type=int, default=16, help='train batch size')
+parser.add_argument('--label_len', type=int, default=316, help='coco cats for labels')
+parser.add_argument('--batch_size', type=int, default=1, help='train batch size')
 parser.add_argument('--state_dim', type=int, default=5, help='GSNN hidden state size')
 parser.add_argument('--edge_type_num', type=int, default=2, help='GSNN edge type')
 parser.add_argument('--node_num', type=int, default=1278, help='GSNN hidden state size')
@@ -61,7 +61,7 @@ parser.add_argument('--lr_decay_rate', type=float, default=0.1, help='training w
 parser.add_argument('--lr_decay_step', type=float, default=10, help='training weight decay')
 parser.add_argument('--epochs', type=int, default=20, help='training epochs')
 parser.add_argument('--lr', type=float, default=0.05, help='learning rate')
-parser.add_argument('--cuda', type=bool, default=False, help='enables cuda')
+parser.add_argument('--cuda', type=bool, default=True, help='enables cuda')
 parser.add_argument('--method_pipeline', type=str, default='SGD', help='training method')
 parser.add_argument('--method_gsnn', type=str, default='Adam', help='training method')
 parser.add_argument('--weight_decay', type=float, default=1e-6)
@@ -69,14 +69,16 @@ parser.add_argument('--momentum', type=float, default=0.5)
 parser.add_argument('--penalty', type=int, default=2, help='L2 penalty')
 parser.add_argument('--verbose', type=bool, default=True, help='print training info or not')
 parser.add_argument('--manual_seed', type=int, help='manual seed')
+parser.add_argument('--checkpoint_session', type=int, default=-1 ,help='number of photo')
+parser.add_argument('--checkpoint_epoch', type=int, default=0 ,help='number of photo')
+parser.add_argument('--pretrained', type=bool, default=False ,help='number of photo')
 opt = parser.parse_args()
-opt.cuda = False
 opt.project_path = os.getcwd()
 opt.dataset = 'vgGenome'
 opt.datapath =  '/home/nesa320/huangshicheng/gitforwork/my_gsnn/data/image/VG_100K'
-opt.label_dir = opt.project_path + '/data/image/labels_dict.json'
-opt.label2_dir = opt.project_path + '/data/image/labels.json'
-opt.concat_dir = opt.project_path + '/data/image/concat_dict.json'
+opt.label_dir = opt.project_path + '/data/image/labels_dict_v3.json'
+opt.label2_dir = opt.project_path + '/data/image/labels_v3.json'
+opt.concat_dir = opt.project_path + '/data/image/concat_dict_v3.json'
 opt.anno_dir = opt.project_path + '/data/image/annotation_dict_v3.json'
 opt.graph_dir = opt.project_path + '/data/graph/filtered_graph_v3.json'
 
@@ -97,18 +99,25 @@ def main(opt):
                                       batch_size=opt.batch_size,
                                       shuffle=True, 
                                       num_workers=opt.workers_num)
-    test_dataset = vgDataSet(image_dir=opt.datapath,
-                              label_dir=opt.label_dir,
-                              concat_dir=opt.concat_dir,
-                              anno_dir=opt.anno_dir)
-    test_dataloader = vgDataLoader(test_dataset,
-                                     batch_size=opt.batch_size,
-                                     shuffle=False,
-                                     num_workers=opt.workers_num)
 
     # set up model and train
     pipeline = PipeLine(opt=opt, dataloader=train_dataloader)
+    if opt.checkpoint_session != -1:
+        pretrained_dir = os.path.join(os.getcwd(),
+                                      'models/checkpoints/gsnn_{}_{}.pth'.format(opt.checkpoint_epoch,opt.checkpoint_session))
+        checkpoint = torch.load(pretrained_dir)
+        pipeline.load_state_dict(checkpoint['state_dict'])
+        print("---load model successfully---")
     pipeline._train()
+
+    # test_dataset = vgDataSet(image_dir=opt.datapath,
+    #                           label_dir=opt.label_dir,
+    #                           concat_dir=opt.concat_dir,
+    #                           anno_dir=opt.anno_dir)
+    # test_dataloader = vgDataLoader(test_dataset,
+    #                                  batch_size=opt.batch_size,
+    #                                  shuffle=False,
+    #                                  num_workers=opt.workers_num)
 
     return
 

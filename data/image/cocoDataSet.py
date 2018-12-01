@@ -35,15 +35,16 @@ class vgDataSet(object):
 
     def __init__(self, image_dir: str, label_dir:str, concat_dir:str, anno_dir:str):
         super().__init__()
-        #self.image_dir = [os.path.join(image_dir,f) for f in os.listdir(image_dir)]
-        self.image_dir = [os.path.join(image_dir,'2529.jpg')]
+        self.image_dir = [os.path.join(image_dir,f) for f in os.listdir(image_dir)]
+        #print(self.image_dir)
+        #self.image_dir = [os.path.join(image_dir,'2529.jpg')]
         self.image_name = [re.sub("\D", "",i.split("/")[-1]) for i in self.image_dir]
-        #elf.label_data = json.load(open(label_dir,'r')) ## 316
-        self.label_data = dict.fromkeys(self.image_name, np.zeros(323))
-        #self.concat_data = json.load(open(concat_dir,'r')) ## 80
-        self.concat_data =dict.fromkeys(self.image_name, np.zeros(80))
-        #self.annotation_data = json.load(open(anno_dir, 'r')) ## 919
-        self.annotation_data = dict.fromkeys(self.image_name, np.zeros(1278))
+        self.label_data = json.load(open(label_dir,'r')) ## 316
+        #self.label_data = dict.fromkeys(self.image_name, np.zeros(323))
+        self.concat_data = json.load(open(concat_dir,'r')) ## 80
+        #self.concat_data =dict.fromkeys(self.image_name, np.zeros(80))
+        self.annotation_data = json.load(open(anno_dir, 'r')) ## 919
+        #self.annotation_data = dict.fromkeys(self.image_name, np.zeros(1278))
         self.transform = transforms.Compose(transforms = [
             transforms.ToTensor()
         ])
@@ -52,24 +53,26 @@ class vgDataSet(object):
         # deal with image
         img_path = self.image_dir[index]
         img_name = self.image_name[index]
-        
+
+        # open image
         try:
             with Image.open(img_path) as img:
                 image = img.convert('RGB')
         except:
-            pass
+            return torch.Tensor(1),torch.Tensor(1),torch.Tensor(1),torch.Tensor(1)
+
         # deal with others
-        label = self.label_data[img_name]
-        #concat = np.zeros(80)
+        try:
+            label = self.label_data[img_name]
+        except:
+            label = np.zeros(316)
         concat = self.concat_data[img_name]
         anno = self.annotation_data[img_name]
-        anno[1] = anno[20] = anno[31] = 1
-        #print(len(anno))
+
         # turn to torch
         if self.transform is not None:
             image = image.resize((224, 224))
-            image = self.transform(image)
-        from skimage import io, transform
+            image = self.transform(image).float()
 
         label = torch.FloatTensor(label)
         concat = torch.FloatTensor(concat)
